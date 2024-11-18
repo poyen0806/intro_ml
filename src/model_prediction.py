@@ -1,52 +1,31 @@
 import pandas as pd
-import joblib
+from sklearn.discriminant_analysis import StandardScaler
 
-def load_model(file_path):
-    return joblib.load(file_path)
-
-def predict_and_export(file_path, scaler, selectors, models, output_path):
-    test_data = pd.read_csv(file_path)
-    features = test_data.drop(columns=['player_ID', 'gender', 'play years', 'hold racket handed', 'level'], errors='ignore')
-    X_scaled = scaler.transform(features)
-
-    predictions = {}
-    for target in ['gender', 'hold racket handed']:
-        selector = selectors[target]
-        X_selected = selector.transform(X_scaled)
-        predictions[target] = models[target].predict(X_selected)
-
-    play_years_test_selected = selectors['play years'].transform(X_scaled)
-    level_test_selected = selectors['level'].transform(X_scaled)
-
-    play_years_pred = models['play years'].predict(play_years_test_selected)
-    level_pred = models['level'].predict(level_test_selected)
-
-    play_years_df = pd.get_dummies(play_years_pred, prefix='play years', drop_first=False).astype(int)
-    level_df = pd.get_dummies(level_pred, prefix='level', drop_first=False).astype(int)
-
-    required_play_years_columns = ['play years_0', 'play years_1', 'play years_2']
-    required_level_columns = ['level_0', 'level_1', 'level_2']
+def predict_target(models, selectors, test_data_path, res):
+    """
+    預測目標變數的機率，並將結果添加到 res DataFrame。
+    """
+    # 讀取測試資料
+    test_data = pd.read_csv(test_data_path).drop(columns=['data_ID'])
     
-    for col in required_play_years_columns:
-        if col not in play_years_df.columns:
-            play_years_df[col] = 0
-    for col in required_level_columns:
-        if col not in level_df.columns:
-            level_df[col] = 0
-
-    play_years_df = play_years_df[required_play_years_columns]
-    level_df = level_df[required_level_columns]
-
-    output_df = pd.DataFrame()
-    output_df['data_ID'] = test_data['data_ID']
-    output_df['gender'] = predictions['gender'].astype(int)
-    output_df['hold racket handed'] = predictions['hold racket handed'].astype(int)
-
-    output_df = pd.concat([output_df, play_years_df, level_df], axis=1)
-
-    output_df = output_df[['data_ID', 'gender', 'hold racket handed', 
-                           'play years_0', 'play years_1', 'play years_2', 
-                           'level_0', 'level_1', 'level_2']]
+    # 標準化
+    test_data = StandardScaler().fit_transform(test_data)
     
-    output_df.to_csv(output_path, index=False)
-    print(f"Predictions saved to {output_path}")
+    # 預測各目標變數的機率
+    y_gender_pred = models['gender'].predict_proba(selectors['gender'].transform(test_data))
+    y_hold_racket_pred = models['hold racket handed'].predict_proba(selectors['hold racket handed'].transform(test_data))
+    y_play_years_pred = models['play years'].predict_proba(selectors['play years'].transform(test_data))
+    y_level_pred = models['level'].predict_proba(selectors['level'].transform(test_data))
+    
+    # 添加二元分類目標的機率 (取第二類的機率值)
+    res['gender'] = y_gender_pred[:, 1]
+    res['hold racket handed'] = y_hold_racket_pred[:, 1]
+    
+    # 添加多類別目標的機率，展開為多個欄位
+    play_years_df = pd.DataFrame(y_play_years_pred, columns=['play years_0', 'play years_1', 'play years_2'])
+    level_df = pd.DataFrame(y_level_pred, columns=['level_0', 'level_1', 'level_2'])
+
+    # 合併結果到 res DataFrame
+    res = pd.concat([res, play_years_df, level_df], axis=1)
+    
+    return res
