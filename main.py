@@ -17,14 +17,15 @@ if args.mode == 'train':
     # Train models and save them
     models = {}
     selectors = {}
+
+    # Load data for the specific target
+    features, targets = load_and_process_data('data/train.csv')
+
+    # Split data into train and test sets
+    X_train, X_test, y_train, y_test = split_data(features, targets)
+
     for target in ['gender', 'hold racket handed', 'play years', 'level']:
         print(f"Training model for {target}...")
-        
-        # Load data for the specific target
-        features, targets = load_and_process_data('data/train.csv')
-        
-        # Split data into train and test sets
-        X_train, X_test, y_train, y_test = split_data(features, targets)
         
         # Train and evaluate the model
         model, selector = train_and_evaluate_model(X_train, y_train, X_test, y_test, target)
